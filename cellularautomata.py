@@ -11,83 +11,6 @@ def generate_random_maze(w,h):
         maze.append(row)
     return maze
 
-def breed_maze(m1,m2):
-    maze = []
-    for y in range(len(m1)):
-        row = []
-        for x in range (len(m1[0])):
-            if random.random() <= 0.5:
-                row.append(m1[y][x])
-            else:
-                row.append(m2[y][x])
-        maze.append(row)
-    return maze
-
-# default 20% chance for cells to flip within the maze
-def mutate_maze(maze):
-    for y in range(len(maze)):
-        for x in range(len(maze[0])):
-            if random.random() <= 0.2:
-                maze[y][x] = abs(maze[y][x] - 1)
-    return maze
-
-# find the sum of the fitness scores of all the mazes for usage in selection
-def total_fitness(mazes):
-    total_fitness = 0
-    for m in mazes:
-        total_fitness+=m[1]
-    return total_fitness
-
-# use a weighted probability distribution to select n/2 of the mazes for breeding
-def roulette_selection(mazes):
-    sum_fitness = total_fitness(mazes)
-
-    # overwrite the fitness value of each maze with that value divided by the total fitness,
-    # and append a third boolean value to determine if this candidate has already been selected
-    for m in mazes:
-        m[1] = m[1]/sum_fitness
-        m.append(False)
-
-    # sort the mazes by their selection probability
-    mazes = sorted(mazes,key=lambda x: x[1])
-
-    offspring = []
-
-    # continuously shrink the pool of mazes as parents are pulled out
-    maze_pool = mazes.copy()
-    for i in range(int(len(mazes)/2)):
-
-        # initialize an (eventual) tuple of parents
-        parents = []
-        for j in range(2):
-            # initialize increment and threshold
-            increment = 0
-            threshold = random.random()
-            for m in maze_pool:
-                increment += m[1]
-                #print("Increment:",increment)
-                #print("Threshold:",threshold)
-                if increment >= threshold:# and not m[2]:
-                    parents.append(m[0])
-                    m[2] = True
-                    break
-
-        # create two children by breeding the selected parents and then mutating the child
-        offspring.append(mutate_maze(breed_maze(parents[0],parents[1])))
-        offspring.append(mutate_maze(breed_maze(parents[0],parents[1])))
-    return offspring
-
-
-
-
-# def stochastic_selection(mazes):
-#     total_fitness = 0
-#     for m in mazes:
-#         total_fitness+=m[1]
-#
-#     # create 2 children n/2 times by breeding sampled maze pairs
-#     for n in range(len(mazes)/2):
-
 def count_floors(maze):
     floor_count = 0
     for y in range(len(maze)):
@@ -224,6 +147,110 @@ def bfs_floors(maze):
     # compares the number of visited tiles to the number of floors in the maze
     return(len(visited) == (count_floors(maze)))
 
+def generate_random_rule():
+    rule = [0 for i in range(257)]
+    for r in rule:
+        if random.random() <= 0.5:
+            rule[len(rule)-1] += 1
+        else:
+            rule[len(rule)-1] += -1
+    # generate a random number of iterations between 1 and 4
+    rule[256] = random.randint(1,5)
+    return rule
+
+def breed_rule(r1,r2):
+    rule = []
+    for i in range (0,len(r1)-1):
+        if random.random() <= 0.5:
+            rule.append(r1[i])
+        else:
+            rule.append(r2[i])
+    return rule
+
+# default 20% chance for rules to flip within the maze
+def mutate_rule(rule):
+    # 20% chance to increment the number of iterations up or down
+    if random.random() <= 0.2:
+        if random.random() <= 0.5:
+            rule[len(rule)-1] += 1
+        else:
+            rule[len(rule)-1] += -1
+
+    # to avoid 0 or negative iterations, set the minimum count to 1
+    rule[len(rule)-1] = max(1,rule[len(rule)-1])
+
+    for i in range (0,len(r1)-1):
+        if random.random() <= 0.2:
+            rule[i] = abs(rule[i] - 1)
+    return rule
+
+# use a weighted probability distribution to select n/2 of the mazes for breeding
+def roulette_selection(mazes):
+    sum_fitness = total_fitness(mazes)
+
+    # overwrite the fitness value of each maze with that value divided by the total fitness,
+    # and append a third boolean value to determine if this candidate has already been selected
+    for m in mazes:
+        m[1] = m[1]/sum_fitness
+
+    # sort the mazes by their selection probability
+    mazes = sorted(mazes,key=lambda x: x[1])
+
+    offspring = []
+
+    # continuously shrink the pool of mazes as parents are pulled out
+    maze_pool = mazes.copy()
+    for i in range(int(len(mazes)/2)):
+
+        # initialize an (eventual) tuple of parents
+        parents = []
+        for j in range(2):
+            # initialize increment and threshold
+            increment = 0
+            threshold = random.random()
+            for m in maze_pool:
+                increment += m[1]
+                #print("Increment:",increment)
+                #print("Threshold:",threshold)
+                if increment >= threshold:# and not m[2]:
+                    parents.append(m[2])
+                    break
+
+        # create two children by breeding the selected parents and then mutating the child
+        offspring.append(mutate_rule(breed_rule(parents[0],parents[1])))
+        offspring.append(mutate_rule(breed_rule(parents[0],parents[1])))
+    return offspring
+
+# scan the 8 neighbors around a central cell
+# assumes we are only looking at the interior cells (no borders)
+def scan_byte(maze,cell):
+    byte = []
+    # iterate through the 8 neighbors left to right, top to bottom
+    for y in range(cell[1]-1,cell[1]+2):
+        for x in range(cell[0]-1,cell[0]+2):
+            #exclude the middle cell
+            if not (x == cell[0] and y == cell[1]):
+                byte.append(maze[y][x])
+    return byte
+
+# a byte (generated from a left-to-right 3x3 neighborhood parsing above)
+# is used to look up and return the corresponding cell state in a given CA ruleset
+def ca_lookup(rules,byte):
+    index = 0
+    byte.reverse()
+    # iterate through the 8 bits, incrementing the power of 2 to create a decimal number
+    for i in range(len(byte)):
+        index += byte[i]*(2**i)
+
+    return rules[index]
+
+# find the sum of the fitness scores of all the mazes for usage in selection
+def total_fitness(mazes):
+    total_fitness = 0
+    for m in mazes:
+        total_fitness+=m[1]
+    return total_fitness
+
 def evaluate_fitness(maze):
     score = 0
     # this parameter is very crucial to ensuring the final generation is connected
@@ -241,7 +268,7 @@ def evaluate_fitness(maze):
 def score_population(mazes):
     pop = []
     for m in mazes:
-        pop.append([m,evaluate_fitness(m)])
+        pop.append([m[0],evaluate_fitness(m),m[1]])
     return pop
 
 def print_maze(maze):
@@ -260,51 +287,29 @@ def output_mazes(mazes):
         print("Fitness value:",scored_mazes[i][1])
         #print("Connected:",bfs_floors(scored_mazes[i][0]))
 
+# iterates across the maze, updating cells according to the paired rule
+def iterate_ca(pair):
+    maze = pair[0]
+    rule = pair[1]
+
+    for i in range(rule[256]):
+        for y in range(1, len(maze)-1):
+            for x in range(1, len(maze[0]-1)):
+                maze[y][x] = ca_lookup(rule,scan_byte(maze,(x,y)))
+    return [maze,rule]
 
 def evolve():
-    # start with a random generation of 10 5x5 mazes
-    current_gen = [generate_random_maze(5,5) for i in range(10)]
+    # start with a random generation of 10 rulesets on 10 mazes
+    mazes = [generate_random_maze(5,5) for i in range(10)]
+    rules = [generate_random_rule() for i in range(10)]
+
+    current_gen = [[mazes[i],rules[i]] for i in range(len(mazes))]
 
     # over 100 generations, evolve the maze population
     for i in range(1000):
+        # run the iteration process on the pairs of rule and maze
+        for i in range(len(current_gen)):
+            current_gen[i] = iterate_ca(current_gen[i])
         scored_pop = score_population(current_gen)
         current_gen = roulette_selection(scored_pop)
     output_mazes(current_gen)
-
-maze1 = generate_random_maze(5,5)
-
-while(not bfs_floors(maze1)):
-    maze1 = generate_random_maze(5,5)
-
-#print_maze(maze1)
-print("Floors:", count_floors(maze1))
-print("Walls:", len(maze1)*len(maze1[0]) - count_floors(maze1))
-print("Connected:", bfs_floors(maze1))
-
-maze2 = generate_random_maze(5,5)
-
-while(not bfs_floors(maze2)):
-    maze2 = generate_random_maze(5,5)
-
-#print_maze(maze2)
-print("Floors:", count_floors(maze2))
-print("Walls:", len(maze2)*len(maze2[0]) - count_floors(maze2))
-print("Connected:", bfs_floors(maze2))
-
-offspring = breed_maze(maze1,maze2)
-print_maze(offspring)
-print("Horizontal blocks:", count_horiz(offspring))
-print("Vertical blocks:", count_vert(offspring))
-print(get_scatter(offspring))
-print("Score:",evaluate_fitness(offspring))
-print_maze((mutate_maze(offspring)))
-
-# rules = [0 for i in range(256)]
-# rules[159] = 1
-# maze = [[1,0,0],[1,0,1],[1,1,1]]
-# print_maze(maze)
-# byte = scan_byte(maze,(1,1))
-# print(byte)
-# print("CA State:",ca_lookup(rules,byte))
-
-evolve()
