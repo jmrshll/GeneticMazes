@@ -148,13 +148,9 @@ def bfs_floors(maze):
     return(len(visited) == (count_floors(maze)))
 
 def generate_random_rule():
-    rule = [0 for i in range(257)]
-    for r in rule:
-        if random.random() <= 0.5:
-            rule[len(rule)-1] += 1
-        else:
-            rule[len(rule)-1] += -1
-    # generate a random number of iterations between 1 and 4
+    rule = [random.randint(0,1) for i in range(257)]
+
+    # generate a random number of iterations between 1 and 5
     rule[256] = random.randint(1,5)
     return rule
 
@@ -165,6 +161,11 @@ def breed_rule(r1,r2):
             rule.append(r1[i])
         else:
             rule.append(r2[i])
+    # make the offspring iteration count a random number in the range of the parents'
+    if r1[256] != r2[256]:
+        rule.append(random.randint(min(r1[256],r2[256]),max(r1[256],r2[256])))
+    else:
+        rule.append(r1[256])
     return rule
 
 # default 20% chance for rules to flip within the maze
@@ -179,7 +180,7 @@ def mutate_rule(rule):
     # to avoid 0 or negative iterations, set the minimum count to 1
     rule[len(rule)-1] = max(1,rule[len(rule)-1])
 
-    for i in range (0,len(r1)-1):
+    for i in range (0,len(rule)-1):
         if random.random() <= 0.2:
             rule[i] = abs(rule[i] - 1)
     return rule
@@ -244,6 +245,16 @@ def ca_lookup(rules,byte):
 
     return rules[index]
 
+# iterates across the maze, updating cells according to the paired rule
+def iterate_ca(pair):
+    maze = pair[0]
+    rule = pair[1]
+    for i in range(rule[256]):
+        for y in range(1, len(maze)-1):
+            for x in range(1, len(maze[0])-1):
+                maze[y][x] = ca_lookup(rule,scan_byte(maze,(x,y)))
+    return [maze,rule]
+
 # find the sum of the fitness scores of all the mazes for usage in selection
 def total_fitness(mazes):
     total_fitness = 0
@@ -265,10 +276,10 @@ def evaluate_fitness(maze):
     score = max(0,score)
     return score
 
-def score_population(mazes):
+def score_population(pairs):
     pop = []
-    for m in mazes:
-        pop.append([m[0],evaluate_fitness(m),m[1]])
+    for p in pairs:
+        pop.append([p[0],evaluate_fitness(p[0]),p[1]])
     return pop
 
 def print_maze(maze):
@@ -287,29 +298,25 @@ def output_mazes(mazes):
         print("Fitness value:",scored_mazes[i][1])
         #print("Connected:",bfs_floors(scored_mazes[i][0]))
 
-# iterates across the maze, updating cells according to the paired rule
-def iterate_ca(pair):
-    maze = pair[0]
-    rule = pair[1]
-
-    for i in range(rule[256]):
-        for y in range(1, len(maze)-1):
-            for x in range(1, len(maze[0]-1)):
-                maze[y][x] = ca_lookup(rule,scan_byte(maze,(x,y)))
-    return [maze,rule]
-
 def evolve():
     # start with a random generation of 10 rulesets on 10 mazes
-    mazes = [generate_random_maze(5,5) for i in range(10)]
-    rules = [generate_random_rule() for i in range(10)]
+    mazes = [generate_random_maze(10,10) for i in range(30)]
+    rules = [generate_random_rule() for i in range(30)]
 
     current_gen = [[mazes[i],rules[i]] for i in range(len(mazes))]
+    print("First generation")
+    output_mazes(current_gen)
 
     # over 100 generations, evolve the maze population
-    for i in range(1000):
+    for i in range(100):
         # run the iteration process on the pairs of rule and maze
-        for i in range(len(current_gen)):
-            current_gen[i] = iterate_ca(current_gen[i])
+        for j in range(len(current_gen)):
+            current_gen[j] = iterate_ca(current_gen[j])
         scored_pop = score_population(current_gen)
-        current_gen = roulette_selection(scored_pop)
+        new_rules = roulette_selection(scored_pop)
+        current_gen = [[mazes[i],new_rules[i]] for i in range(len(mazes))]
+
+    print("Final generation")
     output_mazes(current_gen)
+
+evolve()

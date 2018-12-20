@@ -39,54 +39,52 @@ def total_fitness(mazes):
     return total_fitness
 
 # use a weighted probability distribution to select n/2 of the mazes for breeding
-def roulette_selection(mazes):
-    sum_fitness = total_fitness(mazes)
-
-    # overwrite the fitness value of each maze with that value divided by the total fitness,
-    # and append a third boolean value to determine if this candidate has already been selected
-    for m in mazes:
-        m[1] = m[1]/sum_fitness
-        m.append(False)
-
+def roulette_selection(mazes,size,truncate,unique_parents):
     # sort the mazes by their selection probability
     mazes = sorted(mazes,key=lambda x: x[1])
 
     offspring = []
 
     # continuously shrink the pool of mazes as parents are pulled out
-    maze_pool = mazes.copy()
-    for i in range(int(len(mazes)/2)):
 
-        # initialize an (eventual) tuple of parents
+    # if truncate is set to true, we immediately prune the bottom quarter of the population
+    if truncate:
+        maze_pool = mazes[:int(3*len(mazes)/4)]
+    else:
+        maze_pool = mazes.copy()
+
+    sum_fitness = total_fitness(maze_pool)
+
+    # overwrite the fitness value of each maze with that value divided by the total fitness
+    for m in maze_pool:
+        m[1] = m[1]/sum_fitness
+
+    # creates pairs of parents to create two children each
+    for i in range(int(size/2)):
+        # initialize an (eventual) tuple of selected parents
         parents = []
-        for j in range(2):
+        while len(parents) < 2:
             # initialize increment and threshold
             increment = 0
             threshold = random.random()
             for m in maze_pool:
                 increment += m[1]
-                #print("Increment:",increment)
-                #print("Threshold:",threshold)
-                if increment >= threshold:# and not m[2]:
+                # checks whether the roulette ball has fallen into a slot and
+                if increment >= threshold:
                     parents.append(m[0])
-                    m[2] = True
+                    # in the case of unique_parents = True and there are enough candidates left given the size
+                    # removes the parent from the pool
+                    if(unique_parents and len(maze_pool) > int((size-len(offspring))/2)):
+                        maze_pool.remove(m)
+                        # need to update the fitness values to ensure all of the values can be selected
+                        sum_fitness = total_fitness(maze_pool)
+                        for m in maze_pool:
+                            m[1] = m[1]/sum_fitness
                     break
-
         # create two children by breeding the selected parents and then mutating the child
         offspring.append(mutate_maze(breed_maze(parents[0],parents[1])))
         offspring.append(mutate_maze(breed_maze(parents[0],parents[1])))
     return offspring
-
-
-
-
-# def stochastic_selection(mazes):
-#     total_fitness = 0
-#     for m in mazes:
-#         total_fitness+=m[1]
-#
-#     # create 2 children n/2 times by breeding sampled maze pairs
-#     for n in range(len(mazes)/2):
 
 def count_floors(maze):
     floor_count = 0
@@ -194,6 +192,7 @@ def get_scatter(maze):
 
     return max_distance
 
+# returns a list of the 4-way neighbors that are floor tiles
 def get_neighbors(maze, position):
     neighbors = []
     x = position[0]
@@ -264,47 +263,17 @@ def output_mazes(mazes):
 def evolve():
     # start with a random generation of 10 5x5 mazes
     current_gen = [generate_random_maze(5,5) for i in range(10)]
-
-    # over 100 generations, evolve the maze population
-    for i in range(1000):
-        scored_pop = score_population(current_gen)
-        current_gen = roulette_selection(scored_pop)
+    print("First generation")
     output_mazes(current_gen)
+    # over 100 generations, evolve the maze population
+    for i in range(100):
+        scored_pop = score_population(current_gen)
+        # the second argument is the number of returned offspring,
+        # the third argument enables bottom elimination,
+        # the fourth prevents reusing parents when set to true
+        current_gen = roulette_selection(scored_pop,10,False,False)
 
-maze1 = generate_random_maze(5,5)
-
-while(not bfs_floors(maze1)):
-    maze1 = generate_random_maze(5,5)
-
-#print_maze(maze1)
-print("Floors:", count_floors(maze1))
-print("Walls:", len(maze1)*len(maze1[0]) - count_floors(maze1))
-print("Connected:", bfs_floors(maze1))
-
-maze2 = generate_random_maze(5,5)
-
-while(not bfs_floors(maze2)):
-    maze2 = generate_random_maze(5,5)
-
-#print_maze(maze2)
-print("Floors:", count_floors(maze2))
-print("Walls:", len(maze2)*len(maze2[0]) - count_floors(maze2))
-print("Connected:", bfs_floors(maze2))
-
-offspring = breed_maze(maze1,maze2)
-print_maze(offspring)
-print("Horizontal blocks:", count_horiz(offspring))
-print("Vertical blocks:", count_vert(offspring))
-print(get_scatter(offspring))
-print("Score:",evaluate_fitness(offspring))
-print_maze((mutate_maze(offspring)))
-
-# rules = [0 for i in range(256)]
-# rules[159] = 1
-# maze = [[1,0,0],[1,0,1],[1,1,1]]
-# print_maze(maze)
-# byte = scan_byte(maze,(1,1))
-# print(byte)
-# print("CA State:",ca_lookup(rules,byte))
+    print("Final generation")
+    output_mazes(current_gen)
 
 evolve()
